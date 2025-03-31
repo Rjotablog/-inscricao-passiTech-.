@@ -4,22 +4,25 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="description" content="Inscreva-se no canal PassiTech para liberar o download exclusivo">
-    <title>Inscreva-se no PassiTech para liberar o download</title>
+    <title>PassiTech - Libere seu download</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
-        /* Reset e variáveis CSS */
+        /* Variáveis de cores */
         :root {
-            --primary-color: #4CAF50;
-            --primary-hover: #45a049;
-            --secondary-color: #007BFF;
-            --secondary-hover: #0056b3;
-            --text-color: #333;
-            --light-text: #fff;
-            --bg-opacity: 0.9;
+            --dark-bg: #1a1a1a;
+            --darker-bg: #121212;
+            --primary-green: #2ecc71;
+            --primary-hover: #27ae60;
+            --secondary-green: #1abc9c;
+            --text-light: #ecf0f1;
+            --text-muted: #bdc3c7;
+            --card-bg: rgba(30, 30, 30, 0.8);
+            --card-border: rgba(46, 204, 113, 0.2);
         }
-        
+
+        /* Reset básico */
         * {
             margin: 0;
             padding: 0;
@@ -28,42 +31,55 @@
 
         body {
             font-family: 'Poppins', sans-serif;
-            background-color: #f4f4f4;
-            color: var(--text-color);
+            background-color: var(--dark-bg);
+            color: var(--text-light);
+            min-height: 100vh;
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            min-height: 100vh;
-            text-align: center;
             padding: 20px;
-            background-image: linear-gradient(rgba(0, 0, 0, 0.7), rgba(0, 0, 0, 0.7)), url('FONDO_IMAGEM.jpg');
-            background-size: cover;
-            background-position: center;
-            background-attachment: fixed;
+            line-height: 1.6;
+        }
+
+        /* Efeito de gradiente sutil no fundo */
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, 
+                      rgba(26, 26, 26, 0.95) 0%, 
+                      rgba(18, 18, 18, 0.98) 100%);
+            z-index: -1;
         }
 
         /* Container principal */
         .content {
-            max-width: 600px;
-            width: 100%;
+            background-color: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 12px;
             padding: 40px;
-            background-color: rgba(255, 255, 255, var(--bg-opacity));
-            border-radius: 15px;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
-            text-align: center;
-            margin: 20px 0;
-            transition: transform 0.3s ease;
+            width: 100%;
+            max-width: 600px;
+            margin: 20px auto;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+            backdrop-filter: blur(8px);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
         }
 
         .content:hover {
             transform: translateY(-5px);
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.4);
         }
 
         /* Logo */
         #logo {
             width: 180px;
             margin-bottom: 25px;
+            filter: drop-shadow(0 4px 8px rgba(46, 204, 113, 0.3));
             transition: transform 0.3s ease;
         }
 
@@ -73,16 +89,17 @@
 
         /* Títulos */
         h1 {
-            color: var(--primary-color);
+            color: var(--primary-green);
             font-size: 2.2rem;
             margin-bottom: 20px;
             font-weight: 600;
             line-height: 1.3;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
         }
 
         h2 {
+            color: var(--secondary-green);
             font-size: 1.8rem;
-            color: var(--primary-color);
             margin-bottom: 20px;
             font-weight: 600;
         }
@@ -92,37 +109,55 @@
             padding: 15px 30px;
             font-size: 1rem;
             font-weight: 500;
-            color: var(--light-text);
+            color: white;
             border: none;
             cursor: pointer;
             margin-top: 20px;
             border-radius: 50px;
             transition: all 0.3s ease;
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
             display: inline-flex;
             align-items: center;
             justify-content: center;
             gap: 10px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        button::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0));
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        button:hover::after {
+            opacity: 1;
         }
 
         #subscribeBtn {
-            background-color: var(--primary-color);
+            background-color: var(--primary-green);
+            background: linear-gradient(135deg, var(--primary-green) 0%, var(--primary-hover) 100%);
         }
 
         #subscribeBtn:hover {
-            background-color: var(--primary-hover);
-            transform: translateY(-2px);
-            box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
+            transform: translateY(-3px);
+            box-shadow: 0 8px 16px rgba(46, 204, 113, 0.3);
         }
 
         .download-btn {
-            background-color: var(--secondary-color);
+            background-color: var(--secondary-green);
+            background: linear-gradient(135deg, var(--secondary-green) 0%, #16a085 100%);
         }
 
         .download-btn:hover {
-            background-color: var(--secondary-hover);
-            transform: translateY(-2px);
-            box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
+            transform: translateY(-3px);
+            box-shadow: 0 8px 16px rgba(26, 188, 156, 0.3);
         }
 
         /* Link de download */
@@ -138,39 +173,46 @@
 
         /* Seção Sobre Nós */
         .about {
-            background-color: rgba(255, 255, 255, var(--bg-opacity));
+            background-color: var(--card-bg);
+            border: 1px solid var(--card-border);
             padding: 30px;
-            margin: 40px 0;
-            border-radius: 15px;
+            margin: 40px auto;
+            border-radius: 12px;
             max-width: 800px;
             width: 100%;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            backdrop-filter: blur(8px);
         }
 
         .about p {
             font-size: 1.1rem;
-            color: var(--text-color);
+            color: var(--text-muted);
             line-height: 1.6;
             margin-bottom: 15px;
             text-align: justify;
+        }
+
+        .about p:last-child {
+            margin-bottom: 0;
         }
 
         /* Ícones */
         .icon {
             width: 20px;
             height: 20px;
+            filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.2));
         }
 
         /* Animações */
         @keyframes fadeIn {
-            from { opacity: 0; }
-            to { opacity: 1; }
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
         }
 
         /* Responsividade */
         @media (max-width: 768px) {
             .content, .about {
-                padding: 25px;
+                padding: 30px;
                 margin: 15px;
             }
             
@@ -181,16 +223,11 @@
             h2 {
                 font-size: 1.5rem;
             }
-            
-            button {
-                padding: 12px 25px;
-                font-size: 0.9rem;
-            }
         }
 
         @media (max-width: 480px) {
             .content, .about {
-                padding: 20px;
+                padding: 25px 20px;
             }
             
             h1 {
@@ -200,6 +237,12 @@
             #logo {
                 width: 140px;
             }
+            
+            button {
+                padding: 12px 25px;
+                font-size: 0.9rem;
+                width: 100%;
+            }
         }
     </style>
 </head>
@@ -207,7 +250,7 @@
 
     <div class="content">
         <!-- Logo do Canal -->
-        <img id="logo" src="img/AAAA-Photoroom.png" alt="Logo do Canal PassiTech" title="PassiTech">
+        <img id="logo" src="AAAA-Photoroom.png" alt="Logo PassiTech" title="PassiTech">
 
         <!-- Título -->
         <h1>Desbloqueie o download inscrevendo-se no nosso canal!</h1>
@@ -250,8 +293,11 @@
             if (youtubeWindow) {
                 // Mostra feedback visual no botão
                 const btn = document.getElementById('subscribeBtn');
-                btn.innerHTML = '<svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z"/></svg> Inscrição realizada!';
-                btn.style.backgroundColor = '#28a745';
+                btn.innerHTML = '<svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z"/></svg> Inscrição confirmada!';
+                btn.style.background = 'linear-gradient(135deg, #27ae60 0%, #2ecc71 100%)';
+                
+                // Adiciona efeito de pulso
+                btn.style.animation = 'pulse 1.5s infinite';
                 
                 // Libera o link de download após 3 segundos
                 setTimeout(function() {
@@ -271,10 +317,21 @@
         document.addEventListener('DOMContentLoaded', function() {
             document.body.style.opacity = '0';
             setTimeout(function() {
-                document.body.style.transition = 'opacity 0.5s ease';
+                document.body.style.transition = 'opacity 0.8s ease';
                 document.body.style.opacity = '1';
             }, 100);
         });
+
+        // Adiciona animação de pulso
+        const style = document.createElement('style');
+        style.textContent = `
+            @keyframes pulse {
+                0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(46, 204, 113, 0.7); }
+                70% { transform: scale(1.02); box-shadow: 0 0 0 10px rgba(46, 204, 113, 0); }
+                100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(46, 204, 113, 0); }
+            }
+        `;
+        document.head.appendChild(style);
     </script>
 
 </body>
