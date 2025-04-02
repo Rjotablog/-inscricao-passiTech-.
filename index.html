@@ -534,6 +534,7 @@
                     <div class="tabs">
                         <div class="tab active" onclick="openAdminTab(event, 'upload')">Enviar Arquivos</div>
                         <div class="tab" onclick="openAdminTab(event, 'manage')">Gerenciar</div>
+                        <div class="tab" onclick="openAdminTab(event, 'backup')">Backup</div>
                         <div class="tab" onclick="logout()">Sair</div>
                     </div>
 
@@ -594,6 +595,41 @@
                             </tbody>
                         </table>
                     </div>
+
+                    <div id="backup" class="tab-content">
+                        <h3>Backup e Restauração</h3>
+                        <p>Faça backup dos seus arquivos ou restaure de um backup existente:</p>
+                        
+                        <div class="form-group">
+                            <button onclick="exportDatabase()" class="btn-primary">
+                                <svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+                                    <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/>
+                                </svg>
+                                Exportar Backup
+                            </button>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="backupFile">Importar Backup</label>
+                            <input type="file" id="backupFile" accept=".json">
+                            <button onclick="importDatabase()" class="btn-secondary" style="margin-top: 10px;">
+                                <svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+                                    <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
+                                </svg>
+                                Importar Backup
+                            </button>
+                        </div>
+                        
+                        <div class="form-group">
+                            <button onclick="resetDatabase()" class="btn-danger">
+                                <svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+                                    <path d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"/>
+                                </svg>
+                                Resetar Banco de Dados
+                            </button>
+                            <p><small>Isso irá apagar todos os arquivos e configurações.</small></p>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -649,47 +685,9 @@
     </div>
 
     <script>
-        // Configuração da API (substitua pela URL do seu backend quando implantar)
-        const API_BASE_URL = window.location.hostname === 'localhost' 
-            ? 'http://localhost:5000/api' 
-            : 'https://sua-api-passitech.com/api';
-
-        // Simulação de banco de dados (em produção, isso seria substituído por chamadas à API)
-        let filesDatabase = [
-            {
-                id: 1,
-                title: "Manual de Instruções",
-                description: "Manual completo do produto XYZ",
-                filename: "manual_instrucoes.pdf",
-                size: "2.4 MB",
-                uploadDate: "2023-05-15",
-                downloads: 142,
-                requiresSubscription: false,
-                fileData: null // Adicionado para armazenar o arquivo real
-            },
-            {
-                id: 2,
-                title: "Ferramenta de Diagnóstico",
-                description: "Software para diagnóstico de problemas",
-                filename: "diagnostico_tool.exe",
-                size: "15.7 MB",
-                uploadDate: "2023-06-02",
-                downloads: 89,
-                requiresSubscription: true,
-                fileData: null
-            },
-            {
-                id: 3,
-                title: "Catálogo de Peças 2023",
-                description: "Catálogo atualizado de peças e acessórios",
-                filename: "catalogo_pecas.pdf",
-                size: "8.1 MB",
-                uploadDate: "2023-04-20",
-                downloads: 56,
-                requiresSubscription: false,
-                fileData: null
-            }
-        ];
+        // Configuração do localStorage
+        const STORAGE_KEY = 'passitech_downloads';
+        const SUBSCRIPTION_KEY = 'passitech_subscribed';
 
         // Credenciais do administrador
         const ADMIN_CREDENTIALS = {
@@ -698,11 +696,169 @@
         };
 
         // Variáveis globais
+        let filesDatabase = [];
         let currentFileToDownload = null;
         let currentFileToDelete = null;
         let currentFileToEdit = null;
         let isAdminLoggedIn = false;
-        let isSubscribed = false;
+        let isSubscribed = localStorage.getItem(SUBSCRIPTION_KEY) === 'true';
+
+        // Função para carregar dados do localStorage
+        function loadFromStorage() {
+            const savedData = localStorage.getItem(STORAGE_KEY);
+            if (savedData) {
+                try {
+                    filesDatabase = JSON.parse(savedData);
+                    // Converter fileData de string base64 para Blob se existir
+                    filesDatabase.forEach(file => {
+                        if (file.fileData && typeof file.fileData === 'string') {
+                            const byteCharacters = atob(file.fileData.split(',')[1]);
+                            const byteNumbers = new Array(byteCharacters.length);
+                            for (let i = 0; i < byteCharacters.length; i++) {
+                                byteNumbers[i] = byteCharacters.charCodeAt(i);
+                            }
+                            const byteArray = new Uint8Array(byteNumbers);
+                            file.fileData = new Blob([byteArray], { type: file.fileType });
+                        }
+                    });
+                } catch (e) {
+                    console.error('Erro ao carregar dados do localStorage:', e);
+                    resetDatabase();
+                }
+            } else {
+                // Dados iniciais padrão
+                filesDatabase = [
+                    {
+                        id: 1,
+                        title: "Manual de Instruções",
+                        description: "Manual completo do produto XYZ",
+                        filename: "manual_instrucoes.pdf",
+                        size: "2.4 MB",
+                        uploadDate: new Date().toISOString().split('T')[0],
+                        downloads: 0,
+                        requiresSubscription: false,
+                        fileData: null
+                    },
+                    {
+                        id: 2,
+                        title: "Ferramenta de Diagnóstico",
+                        description: "Software para diagnóstico de problemas",
+                        filename: "diagnostico_tool.exe",
+                        size: "15.7 MB",
+                        uploadDate: new Date().toISOString().split('T')[0],
+                        downloads: 0,
+                        requiresSubscription: true,
+                        fileData: null
+                    }
+                ];
+                saveToStorage();
+            }
+        }
+
+        // Função para salvar dados no localStorage
+        function saveToStorage() {
+            // Converter fileData para string base64 para armazenamento
+            const filesToSave = filesDatabase.map(file => {
+                if (file.fileData instanceof Blob) {
+                    return new Promise(resolve => {
+                        const reader = new FileReader();
+                        reader.onload = () => {
+                            const fileCopy = {...file};
+                            fileCopy.fileData = reader.result;
+                            fileCopy.fileType = file.fileData.type;
+                            resolve(fileCopy);
+                        };
+                        reader.readAsDataURL(file.fileData);
+                    });
+                }
+                return Promise.resolve({...file});
+            });
+
+            Promise.all(filesToSave).then(files => {
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(files));
+            });
+        }
+
+        // Função para exportar banco de dados
+        function exportDatabase() {
+            const dataStr = JSON.stringify(filesDatabase, null, 2);
+            const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
+            
+            const exportFileDefaultName = `passitech-backup-${new Date().toISOString().split('T')[0]}.json`;
+            
+            const linkElement = document.createElement('a');
+            linkElement.setAttribute('href', dataUri);
+            linkElement.setAttribute('download', exportFileDefaultName);
+            linkElement.click();
+            
+            showMessage('success', 'Backup exportado com sucesso!');
+        }
+
+        // Função para importar banco de dados
+        function importDatabase() {
+            const fileInput = document.getElementById('backupFile');
+            if (!fileInput.files.length) {
+                showMessage('error', 'Por favor, selecione um arquivo de backup.');
+                return;
+            }
+            
+            const file = fileInput.files[0];
+            const reader = new FileReader();
+            
+            reader.onload = function(e) {
+                try {
+                    const importedData = JSON.parse(e.target.result);
+                    if (!Array.isArray(importedData)) {
+                        throw new Error('Formato de backup inválido');
+                    }
+                    
+                    document.getElementById('modalTitle').textContent = 'Confirmar Importação';
+                    document.getElementById('modalMessage').textContent = `Tem certeza que deseja importar este backup? Isso substituirá todos os arquivos atuais.`;
+                    document.getElementById('modalConfirm').className = 'btn-primary';
+                    document.getElementById('modalConfirm').textContent = 'Importar';
+                    
+                    document.getElementById('modalConfirm').onclick = function() {
+                        filesDatabase = importedData;
+                        saveToStorage();
+                        loadFilesList();
+                        if (isAdminLoggedIn) {
+                            loadManageFilesList();
+                        }
+                        showMessage('success', 'Backup importado com sucesso!');
+                        document.getElementById('confirmModal').style.display = 'none';
+                        fileInput.value = '';
+                    };
+                    
+                    document.getElementById('confirmModal').style.display = 'flex';
+                } catch (e) {
+                    showMessage('error', 'Erro ao importar backup: ' + e.message);
+                    console.error(e);
+                }
+            };
+            
+            reader.readAsText(file);
+        }
+
+        // Função para resetar banco de dados
+        function resetDatabase() {
+            document.getElementById('modalTitle').textContent = 'Confirmar Reset';
+            document.getElementById('modalMessage').textContent = 'Tem certeza que deseja resetar o banco de dados? Todos os arquivos e configurações serão perdidos.';
+            document.getElementById('modalConfirm').className = 'btn-danger';
+            document.getElementById('modalConfirm').textContent = 'Resetar';
+            
+            document.getElementById('modalConfirm').onclick = function() {
+                localStorage.removeItem(STORAGE_KEY);
+                loadFromStorage();
+                loadFilesList();
+                if (isAdminLoggedIn) {
+                    loadManageFilesList();
+                }
+                showMessage('success', 'Banco de dados resetado com sucesso!');
+                document.getElementById('confirmModal').style.display = 'none';
+            };
+            
+            document.getElementById('confirmModal').style.display = 'flex';
+        }
 
         // Função para exibir mensagens
         function showMessage(type, message) {
@@ -753,12 +909,10 @@
         // Função para carregar a lista de arquivos
         async function loadFilesList() {
             try {
-                const files = filesDatabase;
-                
                 const filesList = document.getElementById('filesList');
                 filesList.innerHTML = '';
                 
-                files.forEach(file => {
+                filesDatabase.forEach(file => {
                     const row = document.createElement('tr');
                     
                     row.innerHTML = `
@@ -789,12 +943,10 @@
         // Função para carregar a lista de gerenciamento
         async function loadManageFilesList() {
             try {
-                const files = filesDatabase;
-                
                 const manageList = document.getElementById('manageFilesList');
                 manageList.innerHTML = '';
                 
-                files.forEach(file => {
+                filesDatabase.forEach(file => {
                     const row = document.createElement('tr');
                     
                     row.innerHTML = `
@@ -844,6 +996,8 @@
         async function initiateDownload(file) {
             try {
                 file.downloads++;
+                saveToStorage();
+                
                 if (isAdminLoggedIn) {
                     loadManageFilesList();
                 }
@@ -890,6 +1044,7 @@
         async function deleteFile() {
             try {
                 filesDatabase = filesDatabase.filter(f => f.id !== currentFileToDelete);
+                saveToStorage();
                 
                 loadFilesList();
                 loadManageFilesList();
@@ -932,6 +1087,7 @@
                 file.title = document.getElementById('editTitle').value;
                 file.description = document.getElementById('editDescription').value;
                 file.requiresSubscription = document.getElementById('editSubscription').checked;
+                saveToStorage();
                 
                 loadFilesList();
                 loadManageFilesList();
@@ -994,6 +1150,7 @@
                 
                 // Marcar como inscrito e mostrar a plataforma
                 isSubscribed = true;
+                localStorage.setItem(SUBSCRIPTION_KEY, 'true');
                 setTimeout(() => {
                     document.getElementById('subscribeScreen').style.display = 'none';
                     document.getElementById('mainContent').style.display = 'block';
@@ -1005,12 +1162,25 @@
         // Função para verificar se já está inscrito
         function checkSubscription() {
             isSubscribed = true;
+            localStorage.setItem(SUBSCRIPTION_KEY, 'true');
             initiateDownload(currentFileToDownload);
             document.getElementById('subscribeModal').style.display = 'none';
         }
 
         // Inicialização
         document.addEventListener('DOMContentLoaded', () => {
+            // Carregar dados do localStorage
+            loadFromStorage();
+            
+            // Verificar se já está inscrito para pular a tela de inscrição
+            if (isSubscribed) {
+                document.getElementById('subscribeScreen').style.display = 'none';
+                document.getElementById('mainContent').style.display = 'block';
+            }
+            
+            // Carregar listas
+            loadFilesList();
+            
             // Configurar eventos
             document.getElementById('loginForm').addEventListener('submit', function(e) {
                 e.preventDefault();
@@ -1061,7 +1231,7 @@
                         
                         // Adicionar o novo arquivo
                         const newFile = {
-                            id: filesDatabase.length + 1,
+                            id: filesDatabase.length > 0 ? Math.max(...filesDatabase.map(f => f.id)) + 1 : 1,
                             title: title,
                             description: description,
                             filename: fileName,
@@ -1073,6 +1243,7 @@
                         };
                         
                         filesDatabase.push(newFile);
+                        saveToStorage();
                         
                         // Atualizar as listas
                         loadFilesList();
