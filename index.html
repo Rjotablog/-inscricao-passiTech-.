@@ -709,18 +709,6 @@
             if (savedData) {
                 try {
                     filesDatabase = JSON.parse(savedData);
-                    // Converter fileData de string base64 para Blob se existir
-                    filesDatabase.forEach(file => {
-                        if (file.fileData && typeof file.fileData === 'string') {
-                            const byteCharacters = atob(file.fileData.split(',')[1]);
-                            const byteNumbers = new Array(byteCharacters.length);
-                            for (let i = 0; i < byteCharacters.length; i++) {
-                                byteNumbers[i] = byteCharacters.charCodeAt(i);
-                            }
-                            const byteArray = new Uint8Array(byteNumbers);
-                            file.fileData = new Blob([byteArray], { type: file.fileType });
-                        }
-                    });
                 } catch (e) {
                     console.error('Erro ao carregar dados do localStorage:', e);
                     resetDatabase();
@@ -737,7 +725,7 @@
                         uploadDate: new Date().toISOString().split('T')[0],
                         downloads: 0,
                         requiresSubscription: false,
-                        fileData: null
+                        fileUrl: null
                     },
                     {
                         id: 2,
@@ -748,7 +736,7 @@
                         uploadDate: new Date().toISOString().split('T')[0],
                         downloads: 0,
                         requiresSubscription: true,
-                        fileData: null
+                        fileUrl: null
                     }
                 ];
                 saveToStorage();
@@ -757,26 +745,7 @@
 
         // Função para salvar dados no localStorage
         function saveToStorage() {
-            // Converter fileData para string base64 para armazenamento
-            const filesToSave = filesDatabase.map(file => {
-                if (file.fileData instanceof Blob) {
-                    return new Promise(resolve => {
-                        const reader = new FileReader();
-                        reader.onload = () => {
-                            const fileCopy = {...file};
-                            fileCopy.fileData = reader.result;
-                            fileCopy.fileType = file.fileData.type;
-                            resolve(fileCopy);
-                        };
-                        reader.readAsDataURL(file.fileData);
-                    });
-                }
-                return Promise.resolve({...file});
-            });
-
-            Promise.all(filesToSave).then(files => {
-                localStorage.setItem(STORAGE_KEY, JSON.stringify(files));
-            });
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(filesDatabase));
         }
 
         // Função para exportar banco de dados
@@ -1002,16 +971,13 @@
                     loadManageFilesList();
                 }
                 
-                if (file.fileData) {
-                    const url = URL.createObjectURL(file.fileData);
+                if (file.fileUrl) {
                     const a = document.createElement('a');
-                    a.href = url;
+                    a.href = file.fileUrl;
                     a.download = file.filename;
                     document.body.appendChild(a);
                     a.click();
                     document.body.removeChild(a);
-                    
-                    setTimeout(() => URL.revokeObjectURL(url), 100);
                     
                     showMessage('success', `Download iniciado: ${file.title}`);
                 } else {
@@ -1216,17 +1182,19 @@
                 const fileName = file.name;
                 const fileSize = formatFileSize(file.size);
                 
-                // Simular upload
+                // Mostrar barra de progresso
                 const progressContainer = document.querySelector('.progress-container');
                 const progressBar = document.getElementById('uploadProgress');
-                
                 progressContainer.style.display = 'block';
                 progressBar.style.width = '0%';
                 
                 // Simular progresso
                 setTimeout(() => {
                     progressBar.style.width = '50%';
-                    setTimeout(() => {
+                    
+                    // Converter arquivo para Data URL
+                    const reader = new FileReader();
+                    reader.onload = function(e) {
                         progressBar.style.width = '100%';
                         
                         // Adicionar o novo arquivo
@@ -1239,7 +1207,7 @@
                             uploadDate: new Date().toISOString().split('T')[0],
                             downloads: 0,
                             requiresSubscription: requireSubscription,
-                            fileData: file
+                            fileUrl: e.target.result
                         };
                         
                         filesDatabase.push(newFile);
@@ -1247,14 +1215,17 @@
                         
                         // Atualizar as listas
                         loadFilesList();
-                        loadManageFilesList();
+                        if (isAdminLoggedIn) {
+                            loadManageFilesList();
+                        }
                         
                         // Limpar o formulário
                         document.getElementById('uploadForm').reset();
                         progressContainer.style.display = 'none';
                         
                         showMessage('success', 'Arquivo enviado com sucesso!');
-                    }, 500);
+                    };
+                    reader.readAsDataURL(file);
                 }, 500);
             });
             
