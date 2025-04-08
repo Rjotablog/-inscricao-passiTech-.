@@ -701,7 +701,7 @@
         let currentFileToDelete = null;
         let currentFileToEdit = null;
         let isAdminLoggedIn = false;
-        let isSubscribed = localStorage.getItem(SUBSCRIPTION_KEY) === 'true';
+        let isSubscribed = false;
 
         // Função para carregar dados do localStorage
         function loadFromStorage() {
@@ -972,6 +972,7 @@
                 }
                 
                 if (file.fileUrl) {
+                    // Criar link temporário para download
                     const a = document.createElement('a');
                     a.href = file.fileUrl;
                     a.download = file.filename;
@@ -1117,11 +1118,22 @@
                 // Marcar como inscrito e mostrar a plataforma
                 isSubscribed = true;
                 localStorage.setItem(SUBSCRIPTION_KEY, 'true');
-                setTimeout(() => {
-                    document.getElementById('subscribeScreen').style.display = 'none';
-                    document.getElementById('mainContent').style.display = 'block';
-                    loadFilesList();
-                }, 2000);
+                
+                // Se estiver na tela de inscrição inicial
+                if (document.getElementById('subscribeScreen').style.display !== 'none') {
+                    setTimeout(() => {
+                        document.getElementById('subscribeScreen').style.display = 'none';
+                        document.getElementById('mainContent').style.display = 'block';
+                        loadFilesList();
+                    }, 2000);
+                } 
+                // Se estiver no modal de download
+                else {
+                    document.getElementById('subscribeBtn').style.display = 'none';
+                    document.getElementById('downloadAfterSubscribe').style.display = 'block';
+                    document.getElementById('downloadLink').href = currentFileToDownload.fileUrl;
+                    document.getElementById('downloadLink').download = currentFileToDownload.filename;
+                }
             }
         }
 
@@ -1138,8 +1150,14 @@
             // Carregar dados do localStorage
             loadFromStorage();
             
-            // Verificar se já está inscrito para pular a tela de inscrição
-            if (isSubscribed) {
+            // Verificar se já está inscrito
+            isSubscribed = localStorage.getItem(SUBSCRIPTION_KEY) === 'true';
+            
+            // Se não estiver inscrito, mostrar tela de inscrição
+            if (!isSubscribed) {
+                document.getElementById('subscribeScreen').style.display = 'flex';
+                document.getElementById('mainContent').style.display = 'none';
+            } else {
                 document.getElementById('subscribeScreen').style.display = 'none';
                 document.getElementById('mainContent').style.display = 'block';
             }
@@ -1192,7 +1210,7 @@
                 setTimeout(() => {
                     progressBar.style.width = '50%';
                     
-                    // Converter arquivo para Data URL
+                    // Converter arquivo para Data URL (só funciona para arquivos pequenos)
                     const reader = new FileReader();
                     reader.onload = function(e) {
                         progressBar.style.width = '100%';
@@ -1225,6 +1243,14 @@
                         
                         showMessage('success', 'Arquivo enviado com sucesso!');
                     };
+                    
+                    // Para arquivos maiores que 1MB, mostrar mensagem de erro
+                    if (file.size > 1048576) { // 1MB
+                        showMessage('error', 'Arquivos grandes não são suportados nesta versão. Use arquivos menores que 1MB.');
+                        progressContainer.style.display = 'none';
+                        return;
+                    }
+                    
                     reader.readAsDataURL(file);
                 }, 500);
             });
