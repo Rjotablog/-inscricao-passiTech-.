@@ -685,7 +685,10 @@
     </div>
 
     <script>
-        // Configuração do localStorage
+        // Configuração do IndexedDB para armazenamento de arquivos grandes
+        const DB_NAME = 'PassiTechDownloadsDB';
+        const DB_VERSION = 1;
+        const FILE_STORE = 'files';
         const STORAGE_KEY = 'passitech_downloads';
         const SUBSCRIPTION_KEY = 'passitech_subscribed';
 
@@ -702,16 +705,100 @@
         let currentFileToEdit = null;
         let isAdminLoggedIn = false;
         let isSubscribed = false;
+        let db;
 
-        // Função para carregar dados do localStorage
-        function loadFromStorage() {
+        // Inicializar IndexedDB
+        function initDB() {
+            return new Promise((resolve, reject) => {
+                const request = indexedDB.open(DB_NAME, DB_VERSION);
+                
+                request.onerror = function(event) {
+                    console.error("Erro ao abrir o banco de dados:", event.target.error);
+                    reject("Erro ao abrir o banco de dados");
+                };
+                
+                request.onsuccess = function(event) {
+                    db = event.target.result;
+                    console.log("Banco de dados aberto com sucesso");
+                    resolve(db);
+                };
+                
+                request.onupgradeneeded = function(event) {
+                    const db = event.target.result;
+                    if (!db.objectStoreNames.contains(FILE_STORE)) {
+                        db.createObjectStore(FILE_STORE, { keyPath: 'id' });
+                        console.log("Armazenamento de arquivos criado");
+                    }
+                };
+            });
+        }
+
+        // Função para armazenar arquivo no IndexedDB
+        async function storeFileInDB(fileId, fileData) {
+            return new Promise((resolve, reject) => {
+                if (!db) {
+                    reject("Banco de dados não inicializado");
+                    return;
+                }
+                
+                const transaction = db.transaction([FILE_STORE], 'readwrite');
+                const store = transaction.objectStore(FILE_STORE);
+                
+                const request = store.put({
+                    id: fileId,
+                    data: fileData
+                });
+                
+                request.onsuccess = function() {
+                    resolve();
+                };
+                
+                request.onerror = function(event) {
+                    console.error("Erro ao armazenar arquivo:", event.target.error);
+                    reject("Erro ao armazenar arquivo");
+                };
+            });
+        }
+
+        // Função para recuperar arquivo do IndexedDB
+        async function getFileFromDB(fileId) {
+            return new Promise((resolve, reject) => {
+                if (!db) {
+                    reject("Banco de dados não inicializado");
+                    return;
+                }
+                
+                const transaction = db.transaction([FILE_STORE], 'readonly');
+                const store = transaction.objectStore(FILE_STORE);
+                
+                const request = store.get(fileId);
+                
+                request.onsuccess = function() {
+                    if (request.result) {
+                        resolve(request.result.data);
+                    } else {
+                        reject("Arquivo não encontrado");
+                    }
+                };
+                
+                request.onerror = function(event) {
+                    console.error("Erro ao recuperar arquivo:", event.target.error);
+                    reject("Erro ao recuperar arquivo");
+                };
+            });
+        }
+
+        // Função para carregar dados do localStorage (metadados)
+        async function loadFromStorage() {
+            await initDB(); // Garantir que o banco de dados está inicializado
+            
             const savedData = localStorage.getItem(STORAGE_KEY);
             if (savedData) {
                 try {
                     filesDatabase = JSON.parse(savedData);
                 } catch (e) {
                     console.error('Erro ao carregar dados do localStorage:', e);
-                    resetDatabase();
+                    await resetDatabase();
                 }
             } else {
                 // Dados iniciais padrão
@@ -725,7 +812,7 @@
                         uploadDate: new Date().toISOString().split('T')[0],
                         downloads: 0,
                         requiresSubscription: false,
-                        fileUrl: null
+                        storedInDB: true
                     },
                     {
                         id: 2,
@@ -736,35 +823,69 @@
                         uploadDate: new Date().toISOString().split('T')[0],
                         downloads: 0,
                         requiresSubscription: true,
-                        fileUrl: null
+                        storedInDB: true
                     }
                 ];
-                saveToStorage();
+                await saveToStorage();
             }
         }
 
-        // Função para salvar dados no localStorage
-        function saveToStorage() {
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(filesDatabase));
+        // Função para salvar dados no localStorage (metadados)
+        async function saveToStorage() {
+            try {
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(filesDatabase));
+            } catch (e) {
+                if (e.name === 'QuotaExceededError') {
+                    showMessage('error', 'Armazenamento de metadados cheio! Por favor, exclua alguns arquivos.');
+                } else {
+                    showMessage('error', 'Erro ao salvar metadados: ' + e.message);
+                }
+            }
         }
 
         // Função para exportar banco de dados
-        function exportDatabase() {
-            const dataStr = JSON.stringify(filesDatabase, null, 2);
-            const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
-            
-            const exportFileDefaultName = `passitech-backup-${new Date().toISOString().split('T')[0]}.json`;
-            
-            const linkElement = document.createElement('a');
-            linkElement.setAttribute('href', dataUri);
-            linkElement.setAttribute('download', exportFileDefaultName);
-            linkElement.click();
-            
-            showMessage('success', 'Backup exportado com sucesso!');
+        async function exportDatabase() {
+            try {
+                // Exportar metadados
+                const metadata = filesDatabase;
+                
+                // Exportar arquivos do IndexedDB
+                const filesPromises = metadata.map(async file => {
+                    if (file.storedInDB) {
+                        try {
+                            const fileData = await getFileFromDB(file.id);
+                            return {
+                                ...file,
+                                fileData: fileData
+                            };
+                        } catch (error) {
+                            console.error(`Erro ao exportar arquivo ${file.id}:`, error);
+                            return file;
+                        }
+                    }
+                    return file;
+                });
+                
+                const filesWithData = await Promise.all(filesPromises);
+                const dataStr = JSON.stringify(filesWithData, null, 2);
+                const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
+                
+                const exportFileDefaultName = `passitech-backup-${new Date().toISOString().split('T')[0]}.json`;
+                
+                const linkElement = document.createElement('a');
+                linkElement.setAttribute('href', dataUri);
+                linkElement.setAttribute('download', exportFileDefaultName);
+                linkElement.click();
+                
+                showMessage('success', 'Backup exportado com sucesso!');
+            } catch (error) {
+                showMessage('error', 'Erro ao exportar backup: ' + error.message);
+                console.error(error);
+            }
         }
 
         // Função para importar banco de dados
-        function importDatabase() {
+        async function importDatabase() {
             const fileInput = document.getElementById('backupFile');
             if (!fileInput.files.length) {
                 showMessage('error', 'Por favor, selecione um arquivo de backup.');
@@ -774,7 +895,7 @@
             const file = fileInput.files[0];
             const reader = new FileReader();
             
-            reader.onload = function(e) {
+            reader.onload = async function(e) {
                 try {
                     const importedData = JSON.parse(e.target.result);
                     if (!Array.isArray(importedData)) {
@@ -786,16 +907,44 @@
                     document.getElementById('modalConfirm').className = 'btn-primary';
                     document.getElementById('modalConfirm').textContent = 'Importar';
                     
-                    document.getElementById('modalConfirm').onclick = function() {
-                        filesDatabase = importedData;
-                        saveToStorage();
-                        loadFilesList();
-                        if (isAdminLoggedIn) {
-                            loadManageFilesList();
+                    document.getElementById('modalConfirm').onclick = async function() {
+                        try {
+                            // Limpar dados existentes
+                            await resetDatabase();
+                            
+                            // Importar novos dados
+                            const filesToStore = [];
+                            const metadata = [];
+                            
+                            for (const file of importedData) {
+                                if (file.fileData) {
+                                    // Armazenar arquivo no IndexedDB
+                                    await storeFileInDB(file.id, file.fileData);
+                                    metadata.push({
+                                        ...file,
+                                        fileData: undefined,
+                                        storedInDB: true
+                                    });
+                                } else {
+                                    metadata.push(file);
+                                }
+                            }
+                            
+                            filesDatabase = metadata;
+                            await saveToStorage();
+                            loadFilesList();
+                            
+                            if (isAdminLoggedIn) {
+                                loadManageFilesList();
+                            }
+                            
+                            showMessage('success', 'Backup importado com sucesso!');
+                            document.getElementById('confirmModal').style.display = 'none';
+                            fileInput.value = '';
+                        } catch (error) {
+                            showMessage('error', 'Erro durante a importação: ' + error.message);
+                            console.error(error);
                         }
-                        showMessage('success', 'Backup importado com sucesso!');
-                        document.getElementById('confirmModal').style.display = 'none';
-                        fileInput.value = '';
                     };
                     
                     document.getElementById('confirmModal').style.display = 'flex';
@@ -809,24 +958,41 @@
         }
 
         // Função para resetar banco de dados
-        function resetDatabase() {
-            document.getElementById('modalTitle').textContent = 'Confirmar Reset';
-            document.getElementById('modalMessage').textContent = 'Tem certeza que deseja resetar o banco de dados? Todos os arquivos e configurações serão perdidos.';
-            document.getElementById('modalConfirm').className = 'btn-danger';
-            document.getElementById('modalConfirm').textContent = 'Resetar';
-            
-            document.getElementById('modalConfirm').onclick = function() {
+        async function resetDatabase() {
+            try {
+                // Limpar IndexedDB
+                const req = indexedDB.deleteDatabase(DB_NAME);
+                
+                req.onsuccess = function() {
+                    console.log("Banco de dados apagado com sucesso");
+                };
+                
+                req.onerror = function(event) {
+                    console.error("Erro ao apagar banco de dados:", event.target.error);
+                };
+                
+                req.onblocked = function() {
+                    console.warn("Banco de dados bloqueado para exclusão");
+                };
+                
+                // Limpar localStorage
                 localStorage.removeItem(STORAGE_KEY);
-                loadFromStorage();
+                localStorage.removeItem(SUBSCRIPTION_KEY);
+                
+                // Reinicializar
+                await initDB();
+                await loadFromStorage();
+                
                 loadFilesList();
                 if (isAdminLoggedIn) {
                     loadManageFilesList();
                 }
-                showMessage('success', 'Banco de dados resetado com sucesso!');
-                document.getElementById('confirmModal').style.display = 'none';
-            };
-            
-            document.getElementById('confirmModal').style.display = 'flex';
+                
+                return true;
+            } catch (error) {
+                console.error("Erro ao resetar banco de dados:", error);
+                return false;
+            }
         }
 
         // Função para exibir mensagens
@@ -965,20 +1131,56 @@
         async function initiateDownload(file) {
             try {
                 file.downloads++;
-                saveToStorage();
+                await saveToStorage();
                 
                 if (isAdminLoggedIn) {
                     loadManageFilesList();
                 }
                 
-                if (file.fileUrl) {
-                    // Criar link temporário para download
+                if (file.storedInDB) {
+                    try {
+                        const fileData = await getFileFromDB(file.id);
+                        
+                        // Criar blob a partir dos dados
+                        const byteCharacters = atob(fileData.split(',')[1]);
+                        const byteNumbers = new Array(byteCharacters.length);
+                        for (let i = 0; i < byteCharacters.length; i++) {
+                            byteNumbers[i] = byteCharacters.charCodeAt(i);
+                        }
+                        const byteArray = new Uint8Array(byteNumbers);
+                        const blob = new Blob([byteArray], { type: 'application/octet-stream' });
+                        
+                        // Criar link para download
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = file.filename;
+                        document.body.appendChild(a);
+                        a.click();
+                        
+                        // Limpar
+                        setTimeout(() => {
+                            document.body.removeChild(a);
+                            URL.revokeObjectURL(url);
+                        }, 100);
+                        
+                        showMessage('success', `Download iniciado: ${file.title}`);
+                    } catch (error) {
+                        showMessage('error', 'Erro ao recuperar arquivo do banco de dados');
+                        console.error(error);
+                    }
+                } else if (file.fileUrl) {
+                    // Método antigo para compatibilidade
                     const a = document.createElement('a');
                     a.href = file.fileUrl;
                     a.download = file.filename;
                     document.body.appendChild(a);
                     a.click();
-                    document.body.removeChild(a);
+                    
+                    setTimeout(() => {
+                        document.body.removeChild(a);
+                        window.URL.revokeObjectURL(file.fileUrl);
+                    }, 100);
                     
                     showMessage('success', `Download iniciado: ${file.title}`);
                 } else {
@@ -1011,7 +1213,7 @@
         async function deleteFile() {
             try {
                 filesDatabase = filesDatabase.filter(f => f.id !== currentFileToDelete);
-                saveToStorage();
+                await saveToStorage();
                 
                 loadFilesList();
                 loadManageFilesList();
@@ -1050,11 +1252,11 @@
             document.getElementById('modalConfirm').className = 'btn-primary';
             document.getElementById('modalConfirm').textContent = 'Salvar';
             
-            document.getElementById('modalConfirm').onclick = function() {
+            document.getElementById('modalConfirm').onclick = async function() {
                 file.title = document.getElementById('editTitle').value;
                 file.description = document.getElementById('editDescription').value;
                 file.requiresSubscription = document.getElementById('editSubscription').checked;
-                saveToStorage();
+                await saveToStorage();
                 
                 loadFilesList();
                 loadManageFilesList();
@@ -1146,9 +1348,9 @@
         }
 
         // Inicialização
-        document.addEventListener('DOMContentLoaded', () => {
-            // Carregar dados do localStorage
-            loadFromStorage();
+        document.addEventListener('DOMContentLoaded', async () => {
+            // Carregar dados do localStorage e IndexedDB
+            await loadFromStorage();
             
             // Verificar se já está inscrito
             isSubscribed = localStorage.getItem(SUBSCRIPTION_KEY) === 'true';
@@ -1183,7 +1385,7 @@
                 }
             });
             
-            document.getElementById('uploadForm').addEventListener('submit', function(e) {
+            document.getElementById('uploadForm').addEventListener('submit', async function(e) {
                 e.preventDefault();
                 
                 const title = document.getElementById('fileTitle').value;
@@ -1206,53 +1408,81 @@
                 progressContainer.style.display = 'block';
                 progressBar.style.width = '0%';
                 
-                // Simular progresso
-                setTimeout(() => {
-                    progressBar.style.width = '50%';
-                    
-                    // Converter arquivo para Data URL (só funciona para arquivos pequenos)
+                try {
+                    // Ler o arquivo como Data URL
                     const reader = new FileReader();
-                    reader.onload = function(e) {
-                        progressBar.style.width = '100%';
-                        
-                        // Adicionar o novo arquivo
-                        const newFile = {
-                            id: filesDatabase.length > 0 ? Math.max(...filesDatabase.map(f => f.id)) + 1 : 1,
-                            title: title,
-                            description: description,
-                            filename: fileName,
-                            size: fileSize,
-                            uploadDate: new Date().toISOString().split('T')[0],
-                            downloads: 0,
-                            requiresSubscription: requireSubscription,
-                            fileUrl: e.target.result
-                        };
-                        
-                        filesDatabase.push(newFile);
-                        saveToStorage();
-                        
-                        // Atualizar as listas
-                        loadFilesList();
-                        if (isAdminLoggedIn) {
-                            loadManageFilesList();
-                        }
-                        
-                        // Limpar o formulário
-                        document.getElementById('uploadForm').reset();
-                        progressContainer.style.display = 'none';
-                        
-                        showMessage('success', 'Arquivo enviado com sucesso!');
+                    
+                    reader.onloadstart = function() {
+                        console.log('Iniciando leitura do arquivo...');
                     };
                     
-                    // Para arquivos maiores que 1MB, mostrar mensagem de erro
-                    if (file.size > 1048576) { // 1MB
-                        showMessage('error', 'Arquivos grandes não são suportados nesta versão. Use arquivos menores que 1MB.');
+                    reader.onprogress = function(e) {
+                        if (e.lengthComputable) {
+                            const percentLoaded = Math.round((e.loaded / e.total) * 100);
+                            progressBar.style.width = percentLoaded + '%';
+                        }
+                    };
+                    
+                    reader.onload = async function(e) {
+                        progressBar.style.width = '100%';
+                        
+                        try {
+                            // Criar novo registro de arquivo
+                            const newId = filesDatabase.length > 0 ? Math.max(...filesDatabase.map(f => f.id)) + 1 : 1;
+                            
+                            // Armazenar no IndexedDB
+                            await storeFileInDB(newId, e.target.result);
+                            
+                            // Adicionar metadados
+                            const newFile = {
+                                id: newId,
+                                title: title,
+                                description: description,
+                                filename: fileName,
+                                size: fileSize,
+                                uploadDate: new Date().toISOString().split('T')[0],
+                                downloads: 0,
+                                requiresSubscription: requireSubscription,
+                                storedInDB: true
+                            };
+                            
+                            filesDatabase.push(newFile);
+                            await saveToStorage();
+                            
+                            // Atualizar as listas
+                            loadFilesList();
+                            if (isAdminLoggedIn) {
+                                loadManageFilesList();
+                            }
+                            
+                            // Limpar o formulário
+                            document.getElementById('uploadForm').reset();
+                            progressContainer.style.display = 'none';
+                            
+                            showMessage('success', 'Arquivo enviado com sucesso!');
+                        } catch (error) {
+                            showMessage('error', 'Erro ao processar o arquivo: ' + error.message);
+                            console.error(error);
+                            progressContainer.style.display = 'none';
+                        }
+                    };
+                    
+                    reader.onerror = function() {
+                        showMessage('error', 'Erro ao ler o arquivo.');
                         progressContainer.style.display = 'none';
-                        return;
-                    }
+                    };
+                    
+                    reader.onabort = function() {
+                        showMessage('warning', 'Upload cancelado.');
+                        progressContainer.style.display = 'none';
+                    };
                     
                     reader.readAsDataURL(file);
-                }, 500);
+                } catch (error) {
+                    showMessage('error', 'Erro no upload: ' + error.message);
+                    console.error(error);
+                    progressContainer.style.display = 'none';
+                }
             });
             
             document.getElementById('modalConfirm').addEventListener('click', function() {
